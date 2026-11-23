@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-python-multipart
-edge-tts
-httpx
-imageio-ffmpeg
-yt-dlp
