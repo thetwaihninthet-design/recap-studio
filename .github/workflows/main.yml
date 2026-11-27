@@ -1,0 +1,1323 @@
+name: Build AdMob APK & AAB
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Check Android SDK (preinstalled on ubuntu-latest)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_HOME/build-tools" || ls /usr/lib/android-sdk/build-tools || true
+      - name: Generate Android Project & Keystore
+        run: |
+          mkdir -p app/src/main/assets app/src/main/java/com/recapstudio/burmese app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable app/src/main/res/mipmap-anydpi-v26 app/src/main/res/xml app/src/main/res/mipmap-mdpi app/src/main/res/mipmap-hdpi app/src/main/res/mipmap-xhdpi app/src/main/res/mipmap-xxhdpi app/src/main/res/mipmap-xxxhdpi
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-mdpi/ic_launcher.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-hdpi/ic_launcher.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-mdpi/ic_launcher_round.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-hdpi/ic_launcher_round.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
+          cp app/src/main/assets/logo.png app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+          if [ ! -f app/release-key.jks ]; then keytool -genkeypair -v -keystore app/release-key.jks -alias recapstudio -keyalg RSA -keysize 2048 -validity 10000 -storepass RecapStudio2026! -keypass RecapStudio2026! -dname "CN=Shwe Recap Studio, OU=Mobile, O=RecapStudio, L=Singapore, S=Singapore, C=SG"; else echo "Using committed release keystore - same signature, updates install over the old app"; fi
+
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "AIMovieRecapStudio"
+          include ':app'
+          EOF
+
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.5.0' apply false
+          }
+          EOF
+
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat << 'EOF' > app/proguard-rules.pro
+          -keepclassmembers class * {
+              @android.webkit.JavascriptInterface <methods>;
+          }
+          EOF
+
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.recapstudio.burmese'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.recapstudio.burmese"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0.0"
+              }
+              signingConfigs {
+                  release {
+                      storeFile file('release-key.jks')
+                      storePassword 'RecapStudio2026!'
+                      keyAlias 'recapstudio'
+                      keyPassword 'RecapStudio2026!'
+                  }
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      signingConfig signingConfigs.release
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.7.0'
+              implementation 'androidx.core:core:1.13.1'
+              implementation 'com.google.android.gms:play-services-ads:23.3.0'
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+              <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <queries>
+                  <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+              </queries>
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
+                  android:label="@string/app_name"
+                  android:supportsRtl="true"
+                  android:hardwareAccelerated="true"
+                  android:largeHeap="true"
+                  android:theme="@style/AppTheme">
+                  <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="@string/admob_app_id" />
+                  <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+                  <provider android:name="androidx.core.content.FileProvider" android:authorities="com.recapstudio.burmese.fileprovider" android:exported="false" android:grantUriPermissions="true">
+                      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+                  </provider>
+                  <service android:name=".RecapWorkerService" android:foregroundServiceType="dataSync" android:exported="false" />
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/strings.xml
+          <resources>
+              <string name="app_name">Shwe Recap Studio</string>
+              <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
+              <string name="admob_banner_id">ca-app-pub-3940256099942544/6300978111</string>
+              <string name="admob_interstitial_id">ca-app-pub-3940256099942544/1033173712</string>
+          </resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/xml/file_paths.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths>
+              <cache-path name="parts" path="parts/" />
+          </paths>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/styles.xml
+          <resources>
+              <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+                  <item name="colorPrimary">#6366F1</item>
+                  <item name="colorPrimaryDark">#0B0F19</item>
+                  <item name="colorAccent">#10B981</item>
+                  <item name="android:statusBarColor">#0B0F19</item>
+                  <item name="android:navigationBarColor">#0B0F19</item>
+                  <item name="android:windowBackground">#0B0F19</item>
+              </style>
+          </resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:background="#0B0F19">
+              <FrameLayout
+                  android:id="@+id/nativeVideoOverlay"
+                  android:layout_width="match_parent"
+                  android:layout_height="240dp"
+                  android:background="#000000"
+                  android:visibility="gone">
+                  <VideoView
+                      android:id="@+id/nativeVideoView"
+                      android:layout_width="match_parent"
+                      android:layout_height="match_parent"
+                      android:layout_gravity="center" />
+                  <TextView
+                      android:id="@+id/btnCloseVideo"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:layout_gravity="top|end"
+                      android:layout_margin="8dp"
+                      android:paddingHorizontal="10dp"
+                      android:paddingVertical="4dp"
+                      android:background="#AA000000"
+                      android:text="ပိတ်မည် ✕"
+                      android:textColor="#FFFFFF"
+                      android:textSize="12sp" />
+              </FrameLayout>
+              <WebView android:id="@+id/webView" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+              <FrameLayout android:id="@+id/adBannerContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#090D16" />
+          </LinearLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/ic_launcher_background.xml
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:pathData="M0,0h108v108h-108z"><gradient android:type="linear" android:startX="0" android:startY="0" android:endX="108" android:endY="108" android:startColor="#8B5CF6" android:centerColor="#6D28D9" android:endColor="#2E1065" /></path></vector>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/ic_launcher_foreground.xml
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#00000000" android:strokeColor="#F5C542" android:strokeWidth="3" android:pathData="M24,24h60v60h-60z" /><path android:fillColor="#F5C542" android:pathData="M44,36 L72,54 L44,72 Z" /><path android:fillColor="#FFFFFF" android:pathData="M33.5,30 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" /><path android:fillColor="#FFFFFF" android:pathData="M45.5,30 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" /><path android:fillColor="#FFFFFF" android:pathData="M57.5,30 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" /></vector>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/recapstudio/burmese/MainActivity.java
+          package com.recapstudio.burmese;
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.content.ContentValues;
+          import android.content.SharedPreferences;
+          import android.os.Environment;
+          import android.provider.MediaStore;
+          import android.database.Cursor;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.provider.OpenableColumns;
+          import android.util.Base64;
+          import android.view.View;
+          import android.view.ViewGroup;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.ValueCallback;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebViewClient;
+          import android.widget.FrameLayout;
+          import android.widget.MediaController;
+          import android.widget.TextView;
+          import android.widget.VideoView;
+          import androidx.annotation.NonNull;
+          import androidx.appcompat.app.AppCompatActivity;
+          import androidx.core.content.FileProvider;
+          import com.google.android.gms.ads.*;
+          import com.google.android.gms.ads.interstitial.*;
+          import org.json.JSONObject;
+          import java.io.*;
+          import java.nio.charset.StandardCharsets;
+          public class MainActivity extends AppCompatActivity {
+            private WebView webView;
+            private AdView bannerAdView;
+            private InterstitialAd mInterstitialAd;
+            private FrameLayout videoOverlay;
+            private VideoView videoView;
+            private static final int REQ_SCRIPT = 2001, REQ_VIDEO = 2002, REQ_FILE_CHOOSER = 2003;
+            private ValueCallback<Uri[]> filePathCallback;
+            private Uri lastVideoUri;
+            private FileOutputStream partOut;
+            private File partFile;
+            @Override protected void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+              setContentView(R.layout.activity_main);
+              MobileAds.initialize(this, s -> { loadBanner(); loadInterstitial(); });
+              videoOverlay = findViewById(R.id.nativeVideoOverlay);
+              videoView = findViewById(R.id.nativeVideoView);
+              TextView btnClose = findViewById(R.id.btnCloseVideo);
+              MediaController mc = new MediaController(this);
+              mc.setAnchorView(videoView);
+              videoView.setMediaController(mc);
+              btnClose.setOnClickListener(v -> {
+                videoView.stopPlayback();
+                videoOverlay.setVisibility(View.GONE);
+              });
+              webView = findViewById(R.id.webView);
+              WebSettings ws = webView.getSettings();
+              ws.setJavaScriptEnabled(true); ws.setDomStorageEnabled(true); ws.setAllowFileAccess(true); ws.setAllowContentAccess(true);
+              ws.setAllowFileAccessFromFileURLs(true); ws.setAllowUniversalAccessFromFileURLs(true); ws.setMediaPlaybackRequiresUserGesture(false);
+              webView.setWebViewClient(new WebViewClient());
+              webView.setWebChromeClient(new WebChromeClient() {
+                @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                  if (filePathCallback != null) filePathCallback.onReceiveValue(null);
+                  filePathCallback = callback;
+                  Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                  i.addCategory(Intent.CATEGORY_OPENABLE);
+                  String type = "*/*";
+                  String[] types = params.getAcceptTypes();
+                  if (types != null && types.length > 0 && types[0] != null && !types[0].isEmpty() && types[0].indexOf('/') >= 0) type = types[0];
+                  i.setType(type);
+                  if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                  try { startActivityForResult(Intent.createChooser(i, "Video \u101b\u103d\u1031\u1038\u1038\u1000\u103a\u1015\u102b"), REQ_FILE_CHOOSER); } catch (Exception e) { filePathCallback = null; return false; }
+                  return true;
+                }
+              });
+              webView.addJavascriptInterface(new NativeBridge(), "AndroidApp");
+              webView.loadUrl("file:///android_asset/index.html");
+            }
+            private void setVideoHeightByAspect(String aspect) {
+              ViewGroup.LayoutParams lp = videoOverlay.getLayoutParams();
+              int w = getResources().getDisplayMetrics().widthPixels;
+              if ("9:16".equals(aspect)) {
+                lp.height = Math.min((int)(w * 1.15f), 460);
+              } else if ("4:5".equals(aspect)) {
+                lp.height = Math.min((int)(w * 1.0f), 400);
+              } else {
+                lp.height = (int)(w * 9f / 16f);
+              }
+              videoOverlay.setLayoutParams(lp);
+            }
+            private void playVideoUri(Uri uri) {
+              runOnUiThread(() -> {
+                try {
+                  videoOverlay.setVisibility(View.VISIBLE);
+                  setVideoHeightByAspect("9:16");
+                  videoView.stopPlayback();
+                  videoView.setVideoURI(uri);
+                  videoView.start();
+                } catch (Exception ignored) {}
+              });
+            }
+            private void loadBanner() {
+              FrameLayout box = findViewById(R.id.adBannerContainer);
+              if (box == null) return;
+              bannerAdView = new AdView(this);
+              bannerAdView.setAdUnitId(getString(R.string.admob_banner_id));
+              bannerAdView.setAdSize(AdSize.BANNER);
+              box.removeAllViews(); box.addView(bannerAdView);
+              bannerAdView.loadAd(new AdRequest.Builder().build());
+            }
+            private void loadInterstitial() {
+              InterstitialAd.load(this, getString(R.string.admob_interstitial_id), new AdRequest.Builder().build(), new InterstitialAdLoadCallback() {
+                @Override public void onAdLoaded(@NonNull InterstitialAd ad) { mInterstitialAd = ad; mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() { @Override public void onAdDismissedFullScreenContent() { mInterstitialAd = null; loadInterstitial(); } }); }
+                @Override public void onAdFailedToLoad(@NonNull LoadAdError err) { mInterstitialAd = null; }
+              });
+            }
+            public class NativeBridge {
+              @JavascriptInterface public void pickScriptFile() { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, REQ_SCRIPT); }
+              @JavascriptInterface public void pickRenderVideo() { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("video/*"); startActivityForResult(i, REQ_VIDEO); }
+              @JavascriptInterface public void setAspect(String aspect) { runOnUiThread(() -> setVideoHeightByAspect(aspect)); }
+              @JavascriptInterface public void showAdNow() { runOnUiThread(() -> { if (mInterstitialAd != null) mInterstitialAd.show(MainActivity.this); else loadInterstitial(); }); }
+              @JavascriptInterface public void shareVideo(String prompt) {
+                runOnUiThread(() -> {
+                  try {
+                    if (lastVideoUri == null) { webView.evaluateJavascript("onShareUnavailable('no-video');", null); return; }
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    send.setType("video/*");
+                    send.putExtra(Intent.EXTRA_STREAM, lastVideoUri);
+                    send.putExtra(Intent.EXTRA_TEXT, prompt == null ? "" : prompt);
+                    send.putExtra(Intent.EXTRA_SUBJECT, "Movie Recap — AI Prompt");
+                    send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(send, "Share to AI"));
+                  } catch (Exception e) {
+                    webView.evaluateJavascript("onShareUnavailable('error');", null);
+                  }
+                });
+              }
+              @JavascriptInterface public void beginPartFile(String name) {
+                try {
+                  File dir = new File(getCacheDir(), "parts");
+                  if (!dir.exists()) dir.mkdirs();
+                  File[] old = dir.listFiles();
+                  if (old != null) for (File f : old) { try { f.delete(); } catch (Exception ignored) {} }
+                  partFile = new File(dir, name == null || name.isEmpty() ? "movie-recap-part.mp4" : name);
+                  partOut = new FileOutputStream(partFile, false);
+                } catch (Exception e) { partFile = null; partOut = null; }
+              }
+              @JavascriptInterface public void writePartChunk(String base64) {
+                try {
+                  if (partOut == null || base64 == null) return;
+                  byte[] data = Base64.decode(base64, Base64.DEFAULT);
+                  partOut.write(data);
+                } catch (Exception ignored) {}
+              }
+              @JavascriptInterface public void endPartFile(final String prompt) {
+                try { if (partOut != null) { partOut.flush(); partOut.close(); } } catch (Exception ignored) {}
+                partOut = null;
+                sharePartFile(prompt);
+              }
+              @JavascriptInterface public void shareLastPart(final String prompt) { sharePartFile(prompt); }
+              @JavascriptInterface public void shareText(final String text) {
+                runOnUiThread(() -> {
+                  try {
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    send.setType("text/plain");
+                    send.putExtra(Intent.EXTRA_TEXT, text == null ? "" : text);
+                    send.putExtra(Intent.EXTRA_SUBJECT, "Movie Recap — Subtitle");
+                    startActivity(Intent.createChooser(send, "Share to AI"));
+                  } catch (Exception e) {
+                    webView.evaluateJavascript("onTextShareFailed();", null);
+                  }
+                });
+              }
+              @JavascriptInterface public void openGemini() {
+                runOnUiThread(() -> {
+                  try {
+                    Intent i = getPackageManager().getLaunchIntentForPackage("com.google.android.apps.bard");
+                    if (i != null) { startActivity(i); return; }
+                  } catch (Exception ignored) {}
+                  try {
+                    Intent v = new Intent(Intent.ACTION_VIEW, Uri.parse("https://gemini.google.com/app"));
+                    startActivity(v);
+                  } catch (Exception ignored) {}
+                });
+              }
+              @JavascriptInterface public void startBgJob(String jobJson) {
+                try {
+                  Intent i = new Intent(MainActivity.this, RecapWorkerService.class);
+                  i.putExtra("job", jobJson == null ? "" : jobJson);
+                  if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+                } catch (Exception ignored) {}
+              }
+              @JavascriptInterface public void stopBgJob() {
+                try {
+                  File d = new File(getCacheDir(), "recap-bg"); if (!d.exists()) d.mkdirs();
+                  JSONObject o = new JSONObject();
+                  o.put("state", "stopped"); o.put("kind", ""); o.put("label", "");
+                  o.put("done", 0); o.put("total", 0); o.put("error", "");
+                  o.put("at", System.currentTimeMillis());
+                  File tmp = new File(d, "status.json.tmp");
+                  try (java.io.OutputStream os = new java.io.FileOutputStream(tmp)) { os.write(o.toString().getBytes(StandardCharsets.UTF_8)); }
+                  tmp.renameTo(new File(d, "status.json"));
+                } catch (Exception ignored) {}
+                try { stopService(new Intent(MainActivity.this, RecapWorkerService.class)); } catch (Exception ignored) {}
+              }
+              @JavascriptInterface public String getBgStatus() { return readBgJson("status.json"); }
+              @JavascriptInterface public String getBgResults() { return readBgJson("results.json"); }
+              @JavascriptInterface public String getDeviceId() { try { String d = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID); return d == null ? "" : d; } catch (Exception e) { return ""; } }
+              @JavascriptInterface public String getSavedVideo() {
+                try {
+                  SharedPreferences sp = getSharedPreferences("recap-prefs", MODE_PRIVATE);
+                  JSONObject o = new JSONObject();
+                  o.put("uri", sp.getString("video-uri", ""));
+                  o.put("name", sp.getString("video-name", ""));
+                  o.put("size", sp.getLong("video-size", 0));
+                  return o.toString();
+                } catch (Exception e) { return "{}"; }
+              }
+              @JavascriptInterface public void closePartFile() { try { if (partOut != null) { partOut.flush(); partOut.close(); } } catch (Exception ignored) {} partOut = null; }
+              @JavascriptInterface public boolean savePartFileToGallery() {
+                try {
+                  if (partFile == null || !partFile.exists() || partFile.length() == 0) return false;
+                  String name = partFile.getName();
+                  String mime = "video/mp4";
+                  String lower = name.toLowerCase();
+                  if (lower.endsWith(".webm")) mime = "video/webm";
+                  else if (lower.endsWith(".mp3")) mime = "audio/mpeg";
+                  else if (lower.endsWith(".m4a")) mime = "audio/mp4";
+                  ContentValues cv = new ContentValues();
+                  cv.put(MediaStore.Video.Media.DISPLAY_NAME, name);
+                  cv.put(MediaStore.Video.Media.MIME_TYPE, mime);
+                  cv.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ShweRecap");
+                  Uri uri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
+                  if (uri == null) return false;
+                  java.io.OutputStream os = getContentResolver().openOutputStream(uri);
+                  java.io.InputStream is = new java.io.FileInputStream(partFile);
+                  byte[] buf = new byte[8192]; int n;
+                  while ((n = is.read(buf)) > 0) os.write(buf, 0, n);
+                  is.close(); os.close();
+                  /* Round 44 Fix 3: Gallery သိမ်းပြီးရင် app ထဲမှာပါ မိတ္တူ ထားမယ် — အိပ်ပျော်ပြီး ပြန်လာလည်း ထပ်သိမ်းလို့ ရအောင် */
+                  try {
+                    File expDir = new File(getFilesDir(), "exports");
+                    if (!expDir.exists()) expDir.mkdirs();
+                    File dst = new File(expDir, name);
+                    java.io.InputStream is2 = new java.io.FileInputStream(partFile);
+                    java.io.OutputStream os2 = new java.io.FileOutputStream(dst);
+                    byte[] buf2 = new byte[8192]; int n2;
+                    while ((n2 = is2.read(buf2)) > 0) os2.write(buf2, 0, n2);
+                    is2.close(); os2.close();
+                  } catch (Exception ignored) {}
+                  return true;
+                } catch (Exception e) { return false; }
+              }
+              @JavascriptInterface public boolean resaveExportToGallery(String name) {
+                try {
+                  if (name == null || name.isEmpty()) return false;
+                  File src = null;
+                  File expDir = new File(getFilesDir(), "exports");
+                  File f1 = new File(expDir, name);
+                  if (f1.exists() && f1.length() > 0) src = f1;
+                  if (src == null) {
+                    File partsDir = new File(getCacheDir(), "parts");
+                    File f2 = new File(partsDir, name);
+                    if (f2.exists() && f2.length() > 0) src = f2;
+                  }
+                  if (src == null && partFile != null && partFile.exists() && partFile.length() > 0 && name.equals(partFile.getName())) src = partFile;
+                  if (src == null) {
+                    Uri dl = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                    String[] proj = new String[]{MediaStore.Downloads._ID};
+                    String sel = MediaStore.Downloads.DISPLAY_NAME + "=?";
+                    String[] args = new String[]{name};
+                    try (android.database.Cursor cur = getContentResolver().query(dl, proj, sel, args, null)) {
+                      if (cur != null && cur.moveToFirst()) {
+                        long id = cur.getLong(0);
+                        Uri u = android.content.ContentUris.withAppendedId(dl, id);
+                        java.io.InputStream in = getContentResolver().openInputStream(u);
+                        if (in != null) {
+                          File tmp = new File(getCacheDir(), name);
+                          java.io.OutputStream out = new java.io.FileOutputStream(tmp);
+                          byte[] b = new byte[8192]; int n;
+                          while ((n = in.read(b)) > 0) out.write(b, 0, n);
+                          in.close(); out.close();
+                          src = tmp;
+                        }
+                      }
+                    }
+                  }
+                  if (src == null || !src.exists() || src.length() == 0) return false;
+                  String mime = "video/mp4";
+                  String lower = name.toLowerCase();
+                  if (lower.endsWith(".webm")) mime = "video/webm";
+                  else if (lower.endsWith(".mp3")) mime = "audio/mpeg";
+                  else if (lower.endsWith(".m4a")) mime = "audio/mp4";
+                  ContentValues cv = new ContentValues();
+                  cv.put(MediaStore.Video.Media.DISPLAY_NAME, name);
+                  cv.put(MediaStore.Video.Media.MIME_TYPE, mime);
+                  cv.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ShweRecap");
+                  Uri uri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
+                  if (uri == null) return false;
+                  java.io.OutputStream os = getContentResolver().openOutputStream(uri);
+                  java.io.InputStream is = new java.io.FileInputStream(src);
+                  byte[] buf = new byte[8192]; int n;
+                  while ((n = is.read(buf)) > 0) os.write(buf, 0, n);
+                  is.close(); os.close();
+                  return true;
+                } catch (Exception e) { return false; }
+              }
+              @JavascriptInterface public void sharePartVideo() {
+                runOnUiThread(() -> {
+                  try {
+                    if (partFile == null || !partFile.exists() || partFile.length() == 0) { webView.evaluateJavascript("onPartShareFailed();", null); return; }
+                    Uri uri = FileProvider.getUriForFile(MainActivity.this, "com.recapstudio.burmese.fileprovider", partFile);
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    send.setType("video/*");
+                    send.putExtra(Intent.EXTRA_STREAM, uri);
+                    send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(send, "Share Video"));
+                  } catch (Exception e) {
+                    webView.evaluateJavascript("onPartShareFailed();", null);
+                  }
+                });
+              }
+              private String readBgJson(String name) {
+                try {
+                  File f = new File(new File(getCacheDir(), "recap-bg"), name);
+                  if (!f.exists()) return "{}";
+                  byte[] b = new byte[(int) f.length()];
+                  try (FileInputStream in = new FileInputStream(f)) { int n = 0, r; while (n < b.length && (r = in.read(b, n, b.length - n)) >= 0) n += r; }
+                  return new String(b, StandardCharsets.UTF_8);
+                } catch (Exception e) { return "{}"; }
+              }
+              private void sharePartFile(final String prompt) {
+                runOnUiThread(() -> {
+                  try {
+                    if (partFile == null || !partFile.exists() || partFile.length() == 0) { webView.evaluateJavascript("onPartShareFailed();", null); return; }
+                    Uri uri = FileProvider.getUriForFile(MainActivity.this, "com.recapstudio.burmese.fileprovider", partFile);
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    String shareType = "video/*";
+                    String partName = partFile.getName().toLowerCase();
+                    if (partName.endsWith(".jpg") || partName.endsWith(".jpeg") || partName.endsWith(".png")) shareType = "image/*";
+                    else if (partName.endsWith(".pdf")) shareType = "application/pdf";
+                    else if (partName.indexOf("-audio.") >= 0) shareType = "audio/*";
+                    send.setType(shareType);
+                    send.putExtra(Intent.EXTRA_STREAM, uri);
+                    send.putExtra(Intent.EXTRA_TEXT, prompt == null ? "" : prompt);
+                    send.putExtra(Intent.EXTRA_SUBJECT, "Movie Recap — AI Prompt");
+                    send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(send, "Share to AI"));
+                  } catch (Exception e) {
+                    webView.evaluateJavascript("onPartShareFailed();", null);
+                  }
+                });
+              }
+            }
+            @Override protected void onActivityResult(int req, int res, Intent data) {
+              super.onActivityResult(req, res, data);
+              if (req == REQ_FILE_CHOOSER) {
+                if (filePathCallback == null) return;
+                Uri[] results = null;
+                if (res == Activity.RESULT_OK && data != null) {
+                  if (data.getClipData() != null) {
+                    int n = data.getClipData().getItemCount();
+                    results = new Uri[n];
+                    for (int k = 0; k < n; k++) results[k] = data.getClipData().getItemAt(k).getUri();
+                  } else if (data.getData() != null) {
+                    results = new Uri[]{ data.getData() };
+                  }
+                  if (results != null) {
+                    for (Uri u : results) {
+                      try { getContentResolver().takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Exception ignored) {}
+                    }
+                  }
+                  if (results != null && results.length > 0 && results[0] != null) {
+                    lastVideoUri = results[0];
+                    try {
+                      SharedPreferences sp = getSharedPreferences("recap-prefs", MODE_PRIVATE);
+                      SharedPreferences.Editor ed = sp.edit();
+                      ed.putString("video-uri", lastVideoUri.toString());
+                      try (Cursor c = getContentResolver().query(lastVideoUri, null, null, null, null)) {
+                        if (c != null && c.moveToFirst()) {
+                          int ni = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                          if (ni >= 0) ed.putString("video-name", c.getString(ni));
+                          int si = c.getColumnIndex(OpenableColumns.SIZE);
+                          if (si >= 0 && !c.isNull(si)) ed.putLong("video-size", c.getLong(si));
+                        }
+                      } catch (Exception ignored) {}
+                      ed.apply();
+                    } catch (Exception ignored) {}
+                  }
+                }
+                filePathCallback.onReceiveValue(results);
+                filePathCallback = null;
+                return;
+              }
+              if (res != Activity.RESULT_OK || data == null || data.getData() == null) return;
+              final Uri uri = data.getData();
+              try {
+                final int takeFlags = data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION;
+                if (takeFlags != 0) getContentResolver().takePersistableUriPermission(uri, takeFlags);
+              } catch (Exception ignored) {}
+              String fileName = "file";
+              long fileSize = -1;
+              try (Cursor c = getContentResolver().query(uri, null, null, null, null)) {
+                if (c != null && c.moveToFirst()) {
+                  int idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                  if (idx >= 0) fileName = c.getString(idx);
+                  int sIdx = c.getColumnIndex(OpenableColumns.SIZE);
+                  if (sIdx >= 0 && !c.isNull(sIdx)) fileSize = c.getLong(sIdx);
+                }
+              } catch (Exception ignored) {}
+              final String name = fileName;
+              final long size = fileSize;
+              try {
+                JSONObject info = new JSONObject();
+                info.put("name", name);
+                if (req == REQ_SCRIPT) {
+                  String low = name.toLowerCase();
+                  boolean isVideo = low.matches(".*\\.(mp4|mov|mkv|webm|avi|3gp|m4v|ts|flv)$");
+                  if (!isVideo && size >= 0 && size <= 2097152L) {
+                    StringBuilder sb = new StringBuilder();
+                    try (InputStream is = getContentResolver().openInputStream(uri); BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                      String l;
+                      int count = 0;
+                      while ((l = br.readLine()) != null && count < 250000 && sb.length() < 500000) {
+                        if (l.length() > 20000) l = l.substring(0, 20000);
+                        sb.append(l).append("\n");
+                        count += l.length() + 1;
+                      }
+                    }
+                    info.put("text", sb.toString());
+                  } else if (isVideo || size > 2097152L) {
+                    info.put("text", "");
+                  }
+                } else if (req == REQ_VIDEO) {
+                  playVideoUri(uri);
+                }
+                final String q = JSONObject.quote(info.toString());
+                final String fn = (req == REQ_SCRIPT) ? "onScriptFileChosen" : "onRenderVideoChosen";
+                runOnUiThread(() -> webView.evaluateJavascript(fn + "(" + q + ");", null));
+              } catch (Throwable ignored) {}
+            }
+            @Override protected void onPause() { if (bannerAdView != null) bannerAdView.pause(); if (videoView != null && videoView.isPlaying()) videoView.pause(); super.onPause(); }
+            @Override protected void onResume() { super.onResume(); if (bannerAdView != null) bannerAdView.resume(); }
+            @Override protected void onDestroy() { if (bannerAdView != null) bannerAdView.destroy(); if (videoView != null) videoView.stopPlayback(); super.onDestroy(); }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/recapstudio/burmese/RecapWorkerService.java
+                    package com.recapstudio.burmese;
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.app.Service;
+          import android.content.ContentValues;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Environment;
+          import android.os.IBinder;
+          import android.os.PowerManager;
+          import android.provider.MediaStore;
+          import androidx.core.app.NotificationCompat;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+          import java.io.BufferedReader;
+          import java.io.ByteArrayOutputStream;
+          import java.io.File;
+          import java.io.FileInputStream;
+          import java.io.InputStream;
+          import java.io.InputStreamReader;
+          import java.io.OutputStream;
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.net.URLEncoder;
+          import java.nio.charset.StandardCharsets;
+
+          public class RecapWorkerService extends Service {
+            static final String BASE = "https://recap-tts--thetwaihninthet.replit.app";
+            static final String CH = "recap-bg";
+            static final int NID = 1001;
+            private PowerManager.WakeLock wl;
+            private NotificationManager nm;
+            private volatile boolean running = false;
+            private volatile int lastStartId = 0;
+
+            @Override public void onCreate() {
+              super.onCreate();
+              nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+              if (Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel c = new NotificationChannel(CH, "Recap background work", NotificationManager.IMPORTANCE_LOW);
+                nm.createNotificationChannel(c);
+              }
+            }
+            @Override public IBinder onBind(Intent i) { return null; }
+
+            @Override public int onStartCommand(Intent intent, int flags, int startId) {
+              if (intent == null || intent.getStringExtra("job") == null) { stopSelf(startId); return START_NOT_STICKY; }
+              if (running) return START_NOT_STICKY;
+              running = true;
+              lastStartId = startId;
+              final String jobJson = intent.getStringExtra("job");
+              PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+              wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "recap:worker");
+              wl.acquire(6 * 60 * 60 * 1000L);
+              startForeground(NID, buildNotif("Background work starting..."));
+              writeStatus("running", "start", "", 0, 1, "");
+              new Thread(() -> {
+                try { runJob(new JSONObject(jobJson)); }
+                catch (Exception e) { writeStatus("error", "", "", 0, 1, e.getMessage() == null ? "error" : e.getMessage()); updateNotif("Error: " + (e.getMessage() == null ? "error" : e.getMessage())); }
+                finally {
+                  try { if (wl != null && wl.isHeld()) wl.release(); } catch (Exception ignored) {}
+                  stopForeground(true);
+                  running = false;
+                  stopSelf(lastStartId);
+                }
+              }).start();
+              return START_NOT_STICKY;
+            }
+
+            private Notification buildNotif(String text) {
+              Intent i = new Intent(this, MainActivity.class);
+              i.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+              PendingIntent pi = PendingIntent.getActivity(this, 0, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+              return new NotificationCompat.Builder(this, CH)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Shwe Recap Studio")
+                .setContentText(text)
+                .setContentIntent(pi)
+                .setOngoing(true)
+                .build();
+            }
+            private void updateNotif(String text) { try { nm.notify(NID, buildNotif(text)); } catch (Exception ignored) {} }
+
+            private File bgDir() { File d = new File(getCacheDir(), "recap-bg"); if (!d.exists()) d.mkdirs(); return d; }
+            private synchronized void writeJsonFile(String name, JSONObject o) {
+              try {
+                File tmp = new File(bgDir(), name + ".tmp");
+                try (OutputStream os = new java.io.FileOutputStream(tmp)) { os.write(o.toString().getBytes(StandardCharsets.UTF_8)); }
+                tmp.renameTo(new File(bgDir(), name));
+              } catch (Exception ignored) {}
+            }
+            private JSONObject readJsonFile(String name) {
+              try {
+                File f = new File(bgDir(), name);
+                if (!f.exists()) return new JSONObject();
+                byte[] b = new byte[(int) f.length()];
+                try (FileInputStream in = new FileInputStream(f)) { int n = 0, r; while (n < b.length && (r = in.read(b, n, b.length - n)) >= 0) n += r; }
+                return new JSONObject(new String(b, StandardCharsets.UTF_8));
+              } catch (Exception e) { return new JSONObject(); }
+            }
+            private void writeStatus(String state, String kind, String label, int done, int total, String error) {
+              try {
+                JSONObject o = new JSONObject();
+                o.put("state", state); o.put("kind", kind); o.put("label", label);
+                o.put("done", done); o.put("total", total); o.put("error", error);
+                o.put("at", System.currentTimeMillis());
+                writeJsonFile("status.json", o);
+              } catch (Exception ignored) {}
+            }
+            private void writeResults(JSONObject patch) {
+              try {
+                JSONObject cur = readJsonFile("results.json");
+                for (java.util.Iterator<String> it = patch.keys(); it.hasNext(); ) { String k = it.next(); cur.put(k, patch.get(k)); }
+                writeJsonFile("results.json", cur);
+              } catch (Exception ignored) {}
+            }
+
+            private String readAll(InputStream in) throws Exception {
+              BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+              StringBuilder sb = new StringBuilder(); String l;
+              while ((l = br.readLine()) != null) sb.append(l).append("\n");
+              return sb.toString();
+            }
+            private String httpGet(String url) throws Exception {
+              HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+              c.setConnectTimeout(30000); c.setReadTimeout(60000);
+              c.setRequestMethod("GET");
+              int code = c.getResponseCode();
+              InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+              String s = in == null ? "" : readAll(in);
+              if (code >= 400) throw new Exception("HTTP " + code + ": " + s);
+              return s;
+            }
+            private String httpPostJson(String url, String json) throws Exception {
+              byte[] b = json.getBytes(StandardCharsets.UTF_8);
+              HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+              c.setConnectTimeout(30000); c.setReadTimeout(120000);
+              c.setRequestMethod("POST");
+              c.setDoOutput(true);
+              c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+              c.setFixedLengthStreamingMode(b.length);
+              try (OutputStream os = c.getOutputStream()) { os.write(b); }
+              int code = c.getResponseCode();
+              InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+              String s = in == null ? "" : readAll(in);
+              if (code >= 400) throw new Exception("HTTP " + code + ": " + s);
+              return s;
+            }
+            private static class MP {
+              String name, filename, ctype; byte[] data; File file;
+              MP(String n, String v) { name = n; filename = null; ctype = "text/plain; charset=utf-8"; data = v.getBytes(StandardCharsets.UTF_8); }
+              MP(String n, String fn, String ct, byte[] d) { name = n; filename = fn; ctype = ct; data = d; }
+              MP(String n, String fn, String ct, File f) { name = n; filename = fn; ctype = ct; file = f; }
+            }
+            private String httpPostMultipart(String url, java.util.List<MP> parts) throws Exception {
+              String boundary = "----RecapBg" + System.currentTimeMillis();
+              HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+              c.setConnectTimeout(30000); c.setReadTimeout(180000);
+              c.setRequestMethod("POST");
+              c.setDoOutput(true);
+              c.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+              c.setChunkedStreamingMode(1024 * 1024);
+              try (OutputStream os = c.getOutputStream()) {
+                byte[] buf = new byte[65536];
+                for (MP p : parts) {
+                  os.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+                  if (p.filename != null) {
+                    os.write(("Content-Disposition: form-data; name=\"" + p.name + "\"; filename=\"" + p.filename + "\"\r\n").getBytes(StandardCharsets.UTF_8));
+                    os.write(("Content-Type: " + p.ctype + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                  } else {
+                    os.write(("Content-Disposition: form-data; name=\"" + p.name + "\"\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                  }
+                  if (p.file != null) {
+                    try (InputStream in = new FileInputStream(p.file)) { int n; while ((n = in.read(buf)) >= 0) os.write(buf, 0, n); }
+                  } else if (p.data != null) os.write(p.data);
+                  os.write("\r\n".getBytes(StandardCharsets.UTF_8));
+                }
+                os.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+                os.flush();
+              }
+              int code = c.getResponseCode();
+              InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+              String s = in == null ? "" : readAll(in);
+              if (code >= 400) throw new Exception("HTTP " + code + ": " + s);
+              return s;
+            }
+            private JSONObject pollJob(String url, int maxTries) throws Exception {
+              for (int i = 0; i < maxTries; i++) {
+                Thread.sleep(3000);
+                JSONObject j = new JSONObject(httpGet(url));
+                String st = j.optString("status", "");
+                if (st.equals("done") || st.equals("error")) return j;
+              }
+              throw new Exception("server job timed out");
+            }
+
+            private void runJob(JSONObject job) throws Exception {
+              String kind = job.optString("kind", "");
+              if (kind.equals("upload") || kind.equals("transcribe-all") || kind.equals("render")) {
+                String uid = job.getString("uploadId");
+                long totalSize = job.optLong("totalSize", 0);
+                SharedPreferences sp = getSharedPreferences("recap-prefs", MODE_PRIVATE);
+                String uriStr = sp.getString("video-uri", "");
+                if (uriStr == null || uriStr.isEmpty()) throw new Exception("video not saved on phone - pick the video again");
+                Uri uri = Uri.parse(uriStr);
+                if (kind.equals("transcribe-all")) { transcribeAll(job, uid, totalSize); return; }
+                uploadVideo(uri, uid, totalSize);
+                writeResults(new JSONObject().put("uploadId", uid).put("serverVidReady", true));
+                if (kind.equals("upload")) {
+                  writeStatus("done", "upload", "Video server ပေါ် တင်ပြီးပါပြီ", 1, 1, "");
+                  updateNotif("Video server ပေါ် တင်ပြီးပါပြီ");
+                  return;
+                }
+                render(job, uid);
+              } else throw new Exception("unknown job: " + kind);
+            }
+
+            private void uploadVideo(Uri uri, String uid, long totalSize) throws Exception {
+              final long CH = 8L * 1024 * 1024;
+              final long totalL = totalSize > 0 ? (totalSize + CH - 1) / CH : 0;
+              if (totalL <= 0) throw new Exception("video size unknown - pick the video again");
+              final int total = (int) totalL;
+              // Ask the server which chunks it already has (it now returns the list).
+              JSONObject s = new JSONObject(httpGet(BASE + "/upload-status?uploadId=" + URLEncoder.encode(uid, "UTF-8")));
+              if (s.optBoolean("done", false)) return;
+              java.util.Set<Integer> have = new java.util.HashSet<>();
+              JSONArray got = s.optJSONArray("got");
+              if (got != null) for (int i = 0; i < got.length(); i++) have.add(got.optInt(i));
+              final java.util.List<Integer> queue = new java.util.ArrayList<>();
+              for (int i = 0; i < total; i++) if (!have.contains(i)) queue.add(i);
+              final java.util.concurrent.atomic.AtomicInteger doneCount = new java.util.concurrent.atomic.AtomicInteger(total - queue.size());
+              final java.util.concurrent.atomic.AtomicReference<String> failure = new java.util.concurrent.atomic.AtomicReference<>(null);
+              final java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean(false);
+              final int PAR = 3;
+              java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(PAR);
+              final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(PAR);
+              for (int w = 0; w < PAR; w++) {
+                pool.execute(new Runnable() {
+                  public void run() {
+                    try {
+                      while (true) {
+                        if (finished.get() || failure.get() != null) return;
+                        int idx;
+                        synchronized (queue) { if (queue.isEmpty()) return; idx = queue.remove(0); }
+                        int tries = 0;
+                        while (true) {
+                          if (finished.get() || failure.get() != null) return;
+                          try {
+                            uploadOneChunk(uri, uid, total, idx, CH, totalSize);
+                            int d = doneCount.incrementAndGet();
+                            updateNotif("Video တင်နေပါတယ်… (" + d + "/" + total + ")");
+                            writeStatus("running", "upload", "chunk " + d, d, total, "");
+                            break; // next chunk from the queue
+                          } catch (Exception e) {
+                            String msg = e.getMessage() == null ? "" : e.getMessage();
+                            if (msg.indexOf("already finished") >= 0) { finished.set(true); return; }
+                            if (++tries > 3) { failure.compareAndSet(null, msg); return; }
+                            try { Thread.sleep(1000); } catch (InterruptedException ie) { return; }
+                          }
+                        }
+                      }
+                    } finally { latch.countDown(); }
+                  }
+                });
+              }
+              try { latch.await(); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new Exception("upload interrupted"); }
+              pool.shutdownNow();
+              if (failure.get() != null) throw new Exception(failure.get());
+              if (finished.get()) return;
+              JSONObject s2 = new JSONObject(httpGet(BASE + "/upload-status?uploadId=" + URLEncoder.encode(uid, "UTF-8")));
+              if (!s2.optBoolean("done", false)) throw new Exception("upload incomplete - try again");
+            }
+
+            private void uploadOneChunk(Uri uri, String uid, long total, int idx, long CH, long totalSize) throws Exception {
+              InputStream in = getContentResolver().openInputStream(uri);
+              if (in == null) throw new Exception("cannot open video");
+              long skipTo = idx * CH, skipped = 0;
+              while (skipped < skipTo) { long n = in.skip(skipTo - skipped); if (n <= 0) break; skipped += n; }
+              byte[] buf = new byte[1024 * 1024];
+              ByteArrayOutputStream baos = new ByteArrayOutputStream();
+              long want = Math.min(CH, totalSize - idx * CH), got = 0;
+              try {
+                while (got < want) {
+                  int n = in.read(buf, 0, (int) Math.min(buf.length, want - got));
+                  if (n < 0) break;
+                  baos.write(buf, 0, n); got += n;
+                }
+              } finally { try { in.close(); } catch (Exception ignored) {} }
+              if (got == 0) throw new Exception("video read failed at chunk " + idx);
+              java.util.List<MP> parts = new java.util.ArrayList<>();
+              parts.add(new MP("uploadId", uid));
+              parts.add(new MP("index", String.valueOf(idx)));
+              parts.add(new MP("total", String.valueOf(total)));
+              parts.add(new MP("chunkSize", String.valueOf(CH)));
+              parts.add(new MP("chunk", "video.mp4", "video/mp4", baos.toByteArray()));
+              JSONObject d = new JSONObject(httpPostMultipart(BASE + "/recap-chunk", parts));
+              if (d.has("error")) throw new Exception(d.optString("error", "upload failed"));
+            }
+
+            private File copyPartAudio(Uri uri, double startSec, double endSec, int pi) throws Exception {
+              android.media.MediaExtractor ex = new android.media.MediaExtractor();
+              try {
+                ex.setDataSource(this, uri, null);
+                int audioTrack = -1;
+                android.media.MediaFormat fmt = null;
+                for (int i = 0; i < ex.getTrackCount(); i++) {
+                  android.media.MediaFormat f = ex.getTrackFormat(i);
+                  String mime = f.getString(android.media.MediaFormat.KEY_MIME);
+                  if (mime != null && mime.startsWith("audio/")) { audioTrack = i; fmt = f; break; }
+                }
+                if (audioTrack < 0) throw new Exception("video မှာ အသံမရှိပါ");
+                ex.selectTrack(audioTrack);
+                long startUs = (long) (startSec * 1000000L);
+                long endUs = (long) (endSec * 1000000L);
+                ex.seekTo(startUs, android.media.MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                File dir = new File(getCacheDir(), "parts");
+                if (!dir.exists()) dir.mkdirs();
+                File out = new File(dir, "part-audio-" + pi + ".m4a");
+                android.media.MediaMuxer mux = new android.media.MediaMuxer(out.getAbsolutePath(), android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                int outTrack = mux.addTrack(fmt);
+                mux.start();
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(512 * 1024);
+                android.media.MediaCodec.BufferInfo info = new android.media.MediaCodec.BufferInfo();
+                long written = 0;
+                while (true) {
+                  int n = ex.readSampleData(buf, 0);
+                  if (n < 0) break;
+                  long t = ex.getSampleTime();
+                  if (t > endUs) break;
+                  info.set(0, n, t, ex.getSampleFlags());
+                  mux.writeSampleData(outTrack, buf, info);
+                  written += n;
+                  ex.advance();
+                }
+                mux.stop();
+                mux.release();
+                if (written == 0 || out.length() < 1024) throw new Exception("အပိုင်း " + (pi + 1) + " မှာ အသံမရှိပါ");
+                return out;
+              } finally {
+                try { ex.release(); } catch (Exception ignored) {}
+              }
+            }
+
+            private File transcodePartAudio(Uri uri, double startSec, double endSec, int pi) throws Exception {
+              android.media.MediaExtractor ex = new android.media.MediaExtractor();
+              android.media.MediaCodec dec = null, enc = null;
+              android.media.MediaMuxer mux = null;
+              try {
+                ex.setDataSource(this, uri, null);
+                int audioTrack = -1;
+                android.media.MediaFormat fmt = null;
+                for (int i = 0; i < ex.getTrackCount(); i++) {
+                  android.media.MediaFormat f = ex.getTrackFormat(i);
+                  String mm = f.getString(android.media.MediaFormat.KEY_MIME);
+                  if (mm != null && mm.startsWith("audio/")) { audioTrack = i; fmt = f; break; }
+                }
+                if (audioTrack < 0) throw new Exception("video မှာ အသံမရှိပါ");
+                String mime = fmt.getString(android.media.MediaFormat.KEY_MIME);
+                int sampleRate = fmt.containsKey(android.media.MediaFormat.KEY_SAMPLE_RATE) ? fmt.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE) : 44100;
+                int channels = fmt.containsKey(android.media.MediaFormat.KEY_CHANNEL_COUNT) ? fmt.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT) : 2;
+                if (channels > 2) channels = 2;
+                ex.selectTrack(audioTrack);
+                long startUs = (long) (startSec * 1000000L);
+                long endUs = (long) (endSec * 1000000L);
+                ex.seekTo(startUs, android.media.MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                dec = android.media.MediaCodec.createDecoderByType(mime);
+                dec.configure(fmt, null, null, 0);
+                android.media.MediaFormat encFmt = android.media.MediaFormat.createAudioFormat(android.media.MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channels);
+                encFmt.setInteger(android.media.MediaFormat.KEY_BIT_RATE, 32000);
+                encFmt.setInteger(android.media.MediaFormat.KEY_AAC_PROFILE, android.media.MediaCodecInfo.CodecProfileLevel.AACObjectLC);
+                enc = android.media.MediaCodec.createEncoderByType(android.media.MediaFormat.MIMETYPE_AUDIO_AAC);
+                enc.configure(encFmt, null, null, android.media.MediaCodec.CONFIGURE_FLAG_ENCODE);
+                File dir = new File(getCacheDir(), "parts");
+                if (!dir.exists()) dir.mkdirs();
+                File out = new File(dir, "part-audio-" + pi + "-low.m4a");
+                mux = new android.media.MediaMuxer(out.getAbsolutePath(), android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                dec.start();
+                enc.start();
+                int outTrack = -1;
+                boolean muxStarted = false;
+                boolean decDone = false, encDone = false;
+                long baseUs = -1;
+                long t0 = System.currentTimeMillis();
+                android.media.MediaCodec.BufferInfo info = new android.media.MediaCodec.BufferInfo();
+                while (!encDone) {
+                  if (System.currentTimeMillis() - t0 > 300000) throw new Exception("audio transcode timeout");
+                  if (!decDone) {
+                    int inIdx = dec.dequeueInputBuffer(10000);
+                    if (inIdx >= 0) {
+                      java.nio.ByteBuffer inBuf = dec.getInputBuffer(inIdx);
+                      int n = ex.readSampleData(inBuf, 0);
+                      if (n < 0 || ex.getSampleTime() > endUs) {
+                        dec.queueInputBuffer(inIdx, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        decDone = true;
+                      } else {
+                        long tt = ex.getSampleTime();
+                        dec.queueInputBuffer(inIdx, 0, n, tt, 0);
+                        ex.advance();
+                      }
+                    }
+                  }
+                  int decOut = dec.dequeueOutputBuffer(info, 10000);
+                  if (decOut >= 0) {
+                    java.nio.ByteBuffer pcm = dec.getOutputBuffer(decOut);
+                    if ((info.flags & android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                      int encIn = enc.dequeueInputBuffer(10000);
+                      if (encIn >= 0) enc.queueInputBuffer(encIn, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                    } else if (info.size > 0) {
+                      int encIn = enc.dequeueInputBuffer(10000);
+                      if (encIn >= 0) {
+                        java.nio.ByteBuffer encBuf = enc.getInputBuffer(encIn);
+                        encBuf.clear();
+                        pcm.position(info.offset);
+                        pcm.limit(info.offset + info.size);
+                        encBuf.put(pcm);
+                        enc.queueInputBuffer(encIn, 0, info.size, info.presentationTimeUs, 0);
+                      }
+                    }
+                    dec.releaseOutputBuffer(decOut, false);
+                  }
+                  int encOut = enc.dequeueOutputBuffer(info, 10000);
+                  if (encOut == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    if (!muxStarted) {
+                      outTrack = mux.addTrack(enc.getOutputFormat());
+                      mux.start();
+                      muxStarted = true;
+                    }
+                  } else if (encOut >= 0) {
+                    if ((info.flags & android.media.MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                      enc.releaseOutputBuffer(encOut, false);
+                    } else {
+                      if (!muxStarted) {
+                        outTrack = mux.addTrack(enc.getOutputFormat());
+                        mux.start();
+                        muxStarted = true;
+                      }
+                      if (info.size > 0) {
+                        java.nio.ByteBuffer ob = enc.getOutputBuffer(encOut);
+                        if (baseUs < 0) baseUs = info.presentationTimeUs;
+                        info.presentationTimeUs = info.presentationTimeUs - baseUs;
+                        ob.position(info.offset);
+                        ob.limit(info.offset + info.size);
+                        mux.writeSampleData(outTrack, ob, info);
+                      }
+                      if ((info.flags & android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) encDone = true;
+                      enc.releaseOutputBuffer(encOut, false);
+                    }
+                  }
+                }
+                if (muxStarted) { try { mux.stop(); } catch (Exception ignored) {} }
+                if (!muxStarted || out.length() < 1024) throw new Exception("audio transcode failed");
+                return out;
+              } finally {
+                try { if (mux != null) mux.release(); } catch (Exception ignored) {}
+                try { if (enc != null) { enc.stop(); enc.release(); } } catch (Exception ignored) {}
+                try { if (dec != null) { dec.stop(); dec.release(); } } catch (Exception ignored) {}
+                try { ex.release(); } catch (Exception ignored) {}
+              }
+            }
+
+            private File extractPartAudio(Uri uri, double startSec, double endSec, int pi) throws Exception {
+              try {
+                return transcodePartAudio(uri, startSec, endSec, pi);
+              } catch (Exception e) {
+                return copyPartAudio(uri, startSec, endSec, pi);
+              }
+            }
+            private void transcribeAll(JSONObject job, String uid, long totalSize) throws Exception {
+              final JSONArray parts = job.getJSONArray("parts");
+              String key = job.optString("licenseKey", ""); if (key.isEmpty()) key = job.optString("geminiKey", "");
+              SharedPreferences sp = getSharedPreferences("recap-prefs", MODE_PRIVATE);
+              String uriStr = sp.getString("video-uri", "");
+              if (uriStr == null || uriStr.isEmpty()) throw new Exception("video not saved on phone - pick the video again");
+              final Uri uri = Uri.parse(uriStr);
+              final String fkey = key;
+              writeResults(new JSONObject().put("uploadId", uid));
+              final JSONObject all = new JSONObject();
+              final java.util.List<Integer> failed = java.util.Collections.synchronizedList(new java.util.ArrayList<Integer>());
+              final java.util.concurrent.atomic.AtomicInteger doneCount = new java.util.concurrent.atomic.AtomicInteger(0);
+              final Object resLock = new Object();
+              final int total = parts.length();
+              /* Parallel: 3 workers, strided — worker w handles parts w, w+3, w+6 ... One part at a time was ~3 min/part (22 parts ~70 min); 3 in parallel is ~3x faster. extractPartAudio writes per-part files and httpPostMultipart/pollJob are stateless, so workers are independent. */
+              final int NWORK = Math.min(3, total);
+              java.util.concurrent.ExecutorService exec = java.util.concurrent.Executors.newFixedThreadPool(NWORK);
+              for (int w = 0; w < NWORK; w++) {
+                final int worker = w;
+                exec.submit(new Runnable() {
+                  public void run() {
+                    for (int i = worker; i < total; i += NWORK) {
+                      try {
+                        JSONObject p = parts.getJSONObject(i);
+                        int pi = p.getInt("pi");
+                        double ps = p.getDouble("start"), pe = p.getDouble("end");
+                        writeStatus("running", "transcribe-all", "အသံ ဖြတ်နေပါတယ်", doneCount.get(), total, "");
+                        File audio = extractPartAudio(uri, ps, pe, pi);
+                        JSONObject done = null;
+                        String lastErr = "transcribe failed";
+                        for (int attempt = 0; attempt < 3; attempt++) {
+                          if (attempt > 0) {
+                            updateNotif("အပိုင်း " + (pi + 1) + " ပြန်စမ်းနေပါတယ်… (" + (attempt + 1) + "/3)");
+                            writeStatus("running", "transcribe-all", "ပြန်စမ်းနေပါတယ် (" + (attempt + 1) + "/3)", doneCount.get(), total, "");
+                            try { Thread.sleep(attempt == 1 ? 30000 : 60000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); return; }
+                          }
+                          try {
+                            java.util.List<MP> mp = new java.util.ArrayList<>();
+                            mp.add(new MP("audio", "part-audio.m4a", "audio/mp4", audio));
+                            mp.add(new MP("partStart", String.valueOf(ps)));
+                            if (!fkey.isEmpty()) mp.add(new MP("licenseKey", fkey));
+                            try { String devId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID); if (devId != null && !devId.isEmpty()) mp.add(new MP("deviceId", devId)); } catch (Exception ignored) {}
+                            writeStatus("running", "transcribe-all", "အသံ တင်နေပါတယ်", doneCount.get(), total, "");
+                            JSONObject jr = new JSONObject(httpPostMultipart(BASE + "/transcribe", mp));
+                            String jid = jr.optString("job", "");
+                            if (jid.isEmpty()) throw new Exception(jr.optString("error", "transcribe failed"));
+                            writeStatus("running", "transcribe-all", "စာသားထုတ်နေတယ် ခဏစောင့်ပါ — Extracting text, please wait", doneCount.get(), total, "");
+                            JSONObject d = pollJob(BASE + "/transcribe-job?id=" + URLEncoder.encode(jid, "UTF-8"), 240);
+                            if (!d.optString("status", "").equals("done")) throw new Exception(d.optString("error", "transcribe failed"));
+                            done = d;
+                            break;
+                          } catch (Exception e) {
+                            lastErr = e.getMessage() == null ? "transcribe failed" : e.getMessage();
+                            boolean transientErr = lastErr.indexOf("503") >= 0 || lastErr.indexOf("Service Unavailable") >= 0 || lastErr.indexOf("timed out") >= 0 || lastErr.indexOf("HTTP Error 5") >= 0;
+                            if (!transientErr) break;
+                          }
+                        }
+                        if (done == null) { failed.add(pi); try { audio.delete(); } catch (Exception ignored) {} }
+                        else {
+                          JSONObject rec = new JSONObject();
+                          rec.put("lines", done.optJSONArray("lines") == null ? new JSONArray() : done.getJSONArray("lines"));
+                          rec.put("srt", done.optString("srt", ""));
+                          synchronized (resLock) {
+                            all.put("part" + pi, rec);
+                            JSONObject res = new JSONObject();
+                            res.put("transcripts", all);
+                            writeResults(res);
+                          }
+                          try { audio.delete(); } catch (Exception ignored) {}
+                        }
+                        int dc = doneCount.incrementAndGet();
+                        writeStatus("running", "transcribe-all", "စာသားထုတ်နေတယ် ခဏစောင့်ပါ — Extracting text, please wait", dc, total, "");
+                        updateNotif("စာသား ရပြီးပါပြီ " + dc + "/" + total + " ပိုင်း");
+                      } catch (Exception e) {
+                        try { int pi2 = parts.getJSONObject(i).getInt("pi"); failed.add(pi2); } catch (Exception ignored) {}
+                        doneCount.incrementAndGet();
+                      }
+                    }
+                  }
+                });
+              }
+              exec.shutdown();
+              try { exec.awaitTermination(6, java.util.concurrent.TimeUnit.HOURS); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new Exception("cancelled"); }
+              if (!failed.isEmpty()) {
+                StringBuilder fb = new StringBuilder();
+                for (int k = 0; k < failed.size(); k++) { if (k > 0) fb.append(", "); fb.append(failed.get(k) + 1); }
+                String fmsg = "အပိုင်း " + fb.toString() + " စာသား မရပါ — ကျန်အပိုင်း သိမ်းပြီးပါပြီ, 🌙 ပြန်နှိပ်ရင် မရသေးတာပဲ လုပ်မယ်";
+                writeStatus("error", "transcribe-all", "", total, total, fmsg);
+                updateNotif(fmsg);
+                return;
+              }
+              writeStatus("done", "transcribe-all", "စာသား အကုန် ရပြီးပါပြီ", total, total, "");
+              updateNotif("စာသား အကုန် ရပြီးပါပြီ");
+            }
+
+            private void render(JSONObject job, String uid) throws Exception {
+              double ss = job.getDouble("scopeStart"), se = job.getDouble("scopeEnd");
+              String srt = job.optString("srt", "");
+              String voiceName = job.optString("voiceFile", "voiceover.mp3");
+              String outName = job.optString("outName", "movie-recap.mp4");
+              String scope = job.optString("scope", "all");
+              File voice = new File(new File(getCacheDir(), "parts"), voiceName);
+              if (!voice.exists() || voice.length() == 0) throw new Exception("voice file missing - generate the voice first");
+              updateNotif("Server မှာ MP4 ထုတ်နေပါတယ်…");
+              writeStatus("running", "render", "render", 0, 1, "");
+              java.util.List<MP> parts = new java.util.ArrayList<>();
+              parts.add(new MP("uploadId", uid));
+              parts.add(new MP("scopeStart", String.valueOf(ss)));
+              parts.add(new MP("scopeEnd", String.valueOf(se)));
+              parts.add(new MP("srt", srt));
+              parts.add(new MP("voice", "voiceover.mp3", "audio/mpeg", voice));
+              JSONObject jr = new JSONObject(httpPostMultipart(BASE + "/render", parts));
+              String jid = jr.optString("job", "");
+              if (jid.isEmpty()) throw new Exception(jr.optString("error", "render failed"));
+              JSONObject done = pollJob(BASE + "/render-job?id=" + URLEncoder.encode(jid, "UTF-8"), 240);
+              if (!done.optString("status", "").equals("done")) throw new Exception(done.optString("error", "render failed"));
+              String fileUrl = done.optString("file", "");
+              if (fileUrl.isEmpty()) throw new Exception("render file missing");
+              HttpURLConnection c = (HttpURLConnection) new URL(BASE + fileUrl).openConnection();
+              c.setConnectTimeout(30000); c.setReadTimeout(300000);
+              c.setRequestMethod("GET");
+              if (c.getResponseCode() >= 400) throw new Exception("MP4 download failed: HTTP " + c.getResponseCode());
+              ContentValues cv = new ContentValues();
+              cv.put(MediaStore.Downloads.DISPLAY_NAME, outName);
+              cv.put(MediaStore.Downloads.MIME_TYPE, "video/mp4");
+              cv.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+              Uri out = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+              if (out == null) throw new Exception("cannot save MP4 to Downloads");
+              byte[] buf = new byte[65536];
+              try (InputStream in = c.getInputStream(); OutputStream os = getContentResolver().openOutputStream(out)) {
+                if (os == null) throw new Exception("cannot open Downloads file");
+                int n; while ((n = in.read(buf)) >= 0) os.write(buf, 0, n);
+              }
+              JSONObject res = new JSONObject();
+              JSONObject r = new JSONObject();
+              r.put("name", outName);
+              r.put("scope", scope);
+              res.put("render", r);
+              writeResults(res);
+              writeStatus("done", "render", "MP4 ရပြီးပါပြီ - Downloads မှာ သိမ်းပြီးပါပြီ", 1, 1, "");
+              updateNotif("MP4 ရပြီးပါပြီ - Downloads မှာ သိမ်းပြီးပါပြီ");
+            }
+          }
+          EOF
+
+          if [ ! -f app/src/main/assets/index.html ]; then
+            echo "ERROR: app/src/main/assets/index.html missing from repo - full Movie Recap Tool was not uploaded" >&2
+            exit 1
+          fi
+          ls -lh app/src/main/assets/index.html
+
+      - name: Build APK & AAB
+        run: gradle assembleRelease bundleRelease --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: app/build/outputs/bundle/release/app-release.aab
+
+      - name: Upload Keystore (keep this file safe - same key needed for Play Store updates)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-keystore
+          path: app/release-key.jks
